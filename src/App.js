@@ -1,4 +1,4 @@
-import React,{useCallback,useEffect,useMemo,useState} from 'react';
+import React,{useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import Icon from './components/Icons';import Modal from './components/Modal';
 import Home from './pages/Home';import ModulePage from './pages/Module';import Sources from './pages/Sources';import Archive from './pages/Archive';import {FlowPage,TimelinePage,IndicatorsPage,Presentation} from './pages/Visual';
 import {prepare,reloadFresh,applyLocalPatch} from './awal';import {pageFromHash,projectFromHash,routeTo,installNavigation,restorePage} from './navigasi';
@@ -8,11 +8,12 @@ export default function App(){
  const [sidebar,setSidebar]=useState(()=>{try{return localStorage.getItem(`${STORAGE_KEY}.sidebar`)!=='collapsed';}catch(e){return true;}});
  const [mobileOpen,setMobileOpen]=useState(false),[menuOpen,setMenuOpen]=useState(false),[reading,setReading]=useState(true),[working,setWorking]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState(''),[offline,setOffline]=useState(false),[presentation,setPresentation]=useState(false),[diagnose,setDiagnose]=useState(false),[ping,setPing]=useState(null);
  const notify=useCallback(s=>setMessage(s),[]);
+ const lastVersionCheck=useRef(0);
  const reload=useCallback(async()=>{setWorking(true);setError('');try{await reloadFresh(setData);setOffline(false);notify('Data terbaru berhasil dimuat dari Sheet.');}catch(e){setError(e.message);}finally{setWorking(false);}},[notify]);
  useEffect(()=>{restorePage();const unsub=installNavigation((p,pid)=>{setPage(p||'home');setProjectId(pid||'');setMobileOpen(false);setMenuOpen(false);window.scrollTo({top:0,behavior:'instant'});});return unsub;},[]);
  useEffect(()=>{let mounted=true;prepare(d=>{if(mounted){setData(d);setOffline(true);setReading(false);}},d=>{if(mounted){setData(d);setOffline(false);setReading(false);}}).catch(e=>{if(mounted){setReading(false);setError(e.message);}});return()=>{mounted=false;};},[]);
- useEffect(()=>{if(!projectId||!data?.records){setView(null);return;}let active=true;const load=async()=>{try{const result=await api.getProject(projectId);if(active)setView(result);}catch(e){if(active)setError(e.message);}};load();return()=>{active=false;};},[projectId,data?.versiData,data?.dibacaPada]);
- useEffect(()=>{const fn=()=>{if(document.visibilityState!=='visible'||!data?.records)return;api.checkVersion().then(v=>{if(Number(v.versiData)!==Number(data.versiData))notify('Ada perubahan di database. Pilih ⋯ → Refresh data.');}).catch(()=>{});};document.addEventListener('visibilitychange',fn);return()=>document.removeEventListener('visibilitychange',fn);},[data?.versiData,data?.records,notify]);
+ useEffect(()=>{if(!projectId||!data?.records){setView(null);return;}let active=true;const load=async()=>{try{const result=await api.getProjectCached(projectId,data?.versiData);if(active)setView(result);}catch(e){if(active)setError(e.message);}};load();return()=>{active=false;};},[projectId,data?.versiData,data?.dibacaPada]);
+ useEffect(()=>{const fn=()=>{if(document.visibilityState!=='visible'||!data?.records)return;if(Date.now()-lastVersionCheck.current<60000)return;lastVersionCheck.current=Date.now();api.checkVersion().then(v=>{if(Number(v.versiData)!==Number(data.versiData))notify('Ada perubahan di database. Pilih ⋯ → Refresh data.');}).catch(()=>{});};document.addEventListener('visibilitychange',fn);return()=>document.removeEventListener('visibilitychange',fn);},[data?.versiData,data?.records,notify]);
  const nav=useMemo(()=>data?.config?.navigation||[{page_id:'home',label:'Beranda',icon:'house',urutan:1},{page_id:'projects',label:'Proyek',icon:'folder',urutan:2}], [data?.config?.navigation]);
  const currentIndex=Math.max(0,nav.findIndex(x=>x.page_id===page));
  const currentProject=useMemo(()=>activeRows(data?.records?.projects).find(p=>p.id===projectId),[data?.records?.projects,projectId]);
@@ -28,6 +29,7 @@ export default function App(){
  if(!data?.config)return <div className="empty-state"><Icon name="shield-alert" size={30}/><h3>Data belum dapat dimuat</h3><p>Buka Web GAS langsung untuk memeriksa login, deployment, dan origin GitHub.</p><a href={API_URL+'?ui=uji'} target="_blank" rel="noreferrer">Buka halaman uji GAS ↗</a><button className="button-primary" onClick={reload}>Coba lagi</button></div>;
  if(page==='home')return <Home data={data} selectProject={chooseProject} addProject={()=>to('projects','')}/>;
  if(page==='sources')return <Sources data={data} projectId={projectId} create={api.createRecord} doSync={api.syncSource} doPreview={api.previewSource} doImport={api.importSource} refresh={mutate}/>;
+ if(projectId&&!view&&['flow','timeline','indicators'].includes(page))return <div className="empty-state"><Icon name="loader" size={27}/><h3>Memuat visual proyek…</h3><p>Data sedang disiapkan dari cache atau Google Sheets.</p></div>;
  if(page==='flow')return <FlowPage view={view} loading={reading} onEdit={()=>to('stages')}/>;
  if(page==='timeline')return <TimelinePage view={view} onEdit={()=>to('milestones')}/>;
  if(page==='indicators')return <IndicatorsPage view={view} onEdit={()=>to('indicators-edit')}/>;

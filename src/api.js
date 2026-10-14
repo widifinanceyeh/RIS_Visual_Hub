@@ -22,6 +22,19 @@ export function apiCall(action,payload={},timeout=TIMEOUT_MS){return new Promise
 export const initData=(fresh=false)=>apiCall('init',{fresh});
 export const checkVersion=()=>apiCall('versi',{},18000);
 export const getProject=id=>apiCall('projectView',{project_id:id});
+// v1.0.1: bila proyek dan versi data tidak berubah, gunakan hasil baca sebelumnya.
+// Promise disimpan agar klik cepat / permintaan paralel tidak menggandakan iframe.
+const projectCache=new Map();
+export function getProjectCached(id,versiData){
+  const key=String(id)+'@'+String(versiData??'');
+  if(projectCache.has(key))return projectCache.get(key);
+  // Batas maksimum agar cache sesi tidak menumpuk tanpa batas.
+  if(projectCache.size>=18)projectCache.delete(projectCache.keys().next().value);
+  const promise=getProject(id).catch(err=>{projectCache.delete(key);throw err;});
+  projectCache.set(key,promise);
+  return promise;
+}
+
 export const createRecord=(module,record)=>apiCall('create',{module,record});
 export const updateField=(module,id,field,value)=>apiCall('update',{module,id,field,value});
 export const archiveRecord=(module,id)=>apiCall('archive',{module,id});
