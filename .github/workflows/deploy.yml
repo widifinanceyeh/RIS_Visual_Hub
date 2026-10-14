@@ -20,8 +20,7 @@ jobs:
           node-version: '20'
       # Bootstrap lock lengkap dalam runner. Berkas lock dasar diunggah bersama repo.
       # Setelah npm registry dapat dijangkau GitHub, npm ci memakai lock hasil resolusi.
-      - run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
-      - run: npm ci --no-audit --no-fund
+      - run: npm install --no-audit --no-fund
       - run: CI=false npm run build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
